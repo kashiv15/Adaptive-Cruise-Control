@@ -1,5 +1,5 @@
 ﻿/* Exported from KeYmaera X v4.7.4 */
-
+/*Cruise Control between lead car and ego car*/ 
 Theorem "pro2"
 Functions
   Real A;           /* Lead car's max acceleration */
