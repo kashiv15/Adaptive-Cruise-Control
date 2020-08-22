@@ -1,0 +1,96 @@
+﻿/* Exported from KeYmaera X v4.7.4 */
+
+Theorem "Project"
+/**
+ * Running time (in minutes, estimate):
+ * Proved?(Y/N):
+ * KeYmaera X Version:
+ *
+ * Please do not put personally identifiable information in any file that you
+ * submit. Any resulting implicit bias can and will be used against your grade.
+ */
+
+Functions
+  Real dsafe;
+  Real r;
+End.
+
+ProgramVariables
+  Real x0lead;/*initial position of lead car*/
+  Real xlead;/*actual position of lead car*/
+  Real v0lead;/*initial velocity of lead car*/
+  Real vlead;/*actual velocity of lead car*/
+  Real alead; /*acceleration of lead car*/
+  Real x0ego;/*initial position of ego car*/
+  Real xego;/*actual position of ego car*/
+  Real v0ego;/*initial velocity of ego car*/
+  Real vego;/*actual velocity of ego car*/
+  Real aego;/*acceleration of ego car*/
+  Real drel;/*relative distance between lead car and ego car*/
+  Real vset;/*set velocity of ego car*/
+End.
+
+Problem
+  /* INITIAL CONDITIONS */
+  (x0lead>x0ego &
+  x0lead > 0 &
+  x0ego > 0 &
+  xlead > xego &
+  xlead > 0 &
+  xego > 0 &
+  vego > 0 &
+  vlead > 0 &
+  v0lead > 0&
+  vset> 0 &
+  alead > 0 &
+  aego > 0 &
+  drel>=dsafe&
+  drel>0 &
+  r>=0&
+  vego<=vset
+  )
+  ->
+  [
+    {
+      t := 0;
+      xlead := x0lead ;
+      vlead:= v0lead ;
+      xego := x0ego ;
+      vego := v0ego ;
+      drel := xlead-xego;
+      {
+        {?((drel >= dsafe)&(vego <= vset)); vego := vlead ; /*Match velocity of ego car with lead car - when relative distance is more than safe distance (speed control)*/
+        ++ ?((drel <= dsafe)&(vego > vset)); aego:= -r ; /* assign ego car for decelration when relative distance is less than safe distance (spacing control) */
+        ++ aego := -r;} /* safely assign acceleration or braking for ego car */
+      }
+      /* CONTINUOUS DYNAMICS */
+      {
+        {  
+            xlead'=vlead,
+            vlead'= alead
+        }
+        {
+            xego'=vego,
+            vego'=aego,t'=1
+            & (vego <= vset & dsafe >= drel)
+        }
+      }
+    }*@invariant(vego<=vset) /* loop invariant */
+  ]
+  (vego<=vset) /* safety condition */
+
+End.
+
+Tactic "Project: Proof"
+implyR(1) ; loop("vego<=vset", 1) ; <(
+  QE,
+  QE,
+  composeb(1) ; composeb(1.1) ; unfold ; <(
+    ODE(1),
+    ODE(1),
+    ODE(1)
+    )
+  )
+End.
+
+End.

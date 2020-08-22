@@ -1,0 +1,219 @@
+/* Exported from KeYmaera X v4.7.4 */
+
+Theorem "Cruise Control Static"
+/**
+ * Running time (in minutes, estimate): 10 minutes (interactive)
+ * Proved?(Y/N): Y
+ * KeYmaera X Version: 4.7.4
+ *
+ */
+
+Functions
+  Real A;           /* Robot's max acceleration */
+  Real B;           /* Robot's max braking */
+  Real ctrlT;       /* Time-trigger limit on evolution */
+  Real scanT;       /* Time interval to update obstacle position from sensors */
+  Real vPublishT;   /* Time interval to publish robot's velocity from sensors */
+  Real distBuffer;  /* Buffer distance between robot and obstacle */ 
+
+  /* Max range of lidar sensor. This is used as the default value of the 
+     obstacle range when an object isn't detected. */
+  Real sensorRange;     
+  
+End.
+
+ProgramVariables
+  Real v; /* Linear velocity of robot */
+  Real a; /* Linear acceleration of robot */
+  
+  Real obstacleDist; /* Distance to obstacle */
+  Real sensedDist; /* Estimated distannce to obstacle based on sensor */
+  Real sensedV;	   /* Estimated velocity of robot based on sensor */
+
+
+  Real t; /* Time */
+  
+  Real worstCaseV; /* Temporary variable to upper bound a future velocity */
+
+End.
+
+Problem
+  (
+    A > 0  & 
+   -B < 0  &
+    ctrlT > 0  &
+    scanT > 0  &
+    vPublishT > 0 &
+    distBuffer > 0  &
+    sensorRange > 0  &
+    v >= 0  &
+    sensedV = v &	/* Assume initial sensor value is accurate */
+    scanT < ctrlT &
+    vPublishT < ctrlT &
+    /* The obstacle must be further than the buffer + current stopping distance */
+    obstacleDist >= v^2 / (2*B) + distBuffer &
+    sensorRange >= v^2 / (2*B) + distBuffer
+
+  ) /* Initial conditions */
+  ->
+  [
+    {
+      /* If we are in range, we assign a valued to sensedDist that is within some range. This is to account 
+         for the delay between the time the obstacle distance is sensed and the time a control decision is made.
+	 We do know however that at worst case we are accelerating at rate A, so the value stored in sensedDist
+	 is no further from the actual obstacle distance by the distance traveled by the robot in the scanT 
+	 interval. This is because the value in sensedT is at most scanT time old. 
+
+	 If we are not in range, we simply assume the worst case that there is an obstacle right at the boundary 
+	 of the sensor range.          
+      */
+
+        {
+          {?(obstacleDist <= sensorRange);
+            sensedDist := *; ?((sensedDist-obstacleDist) <= (v * scanT + 0.5 * A * scanT^2) & obstacleDist < sensedDist);
+          }
+          ++
+          {?(obstacleDist > sensorRange);
+            sensedDist := sensorRange;
+          }
+        }
+      
+      
+      
+      /* The velocity last read by the sensors is stale just like the sensedDist, so we assume the 
+         worst case by using the theoretical next published velocity. The idea is the same as above.
+         The only difference is that the relationship between sensedV and the actual v is dependent 
+	 on the acceleration. If we are accelerating, our sensed v is outdated so it should be smaller
+         than the actual. Similarly, if we are slowing down, our sensed v is now outdated such that it 
+         is it is bigger than the actual v. 
+
+	 The bound is based on the same idea as above where we know it's out of date by at most 
+         vPublishT time.s
+      */
+         
+      sensedV := *; ?((a > 0 & (v-sensedV) <= A * vPublishT & sensedV < v)| (a < 0 & (sensedV - v) <= B * vPublishT & sensedV > v) | (a = 0 & sensedV = v));
+      worstCaseV := (sensedV + A*vPublishT);
+      
+      /* Discrete control of robot */
+      {
+          /* The obstacle distance last read by the sensors is also stale, so again we
+             use the worst case velocity and desired acceleration to predict the 
+             current obstacle distance using the worst case lower bound. It's a lower bound 
+             because there is more distance between the object and the robot than actually
+             predicted. 
+             
+             We then check if the distance traveled until the next control loop + the stopping distance
+             from the future velocity + the buffer distance can be achieved given our lower bound for the
+             obstacle distance.
+          */
+          ?((sensedDist - (worstCaseV * scanT + 0.5 * A * scanT^2)) > (worstCaseV * ctrlT + 0.5 * A * ctrlT^2) + (worstCaseV + A*ctrlT)^2 / (2*B) + distBuffer);
+            a := A;
+          ++
+          ?((sensedDist - (worstCaseV * scanT + 0.5 * A * scanT^2)) > (worstCaseV * ctrlT) + (worstCaseV^2 / (2*B)) + distBuffer);
+            a := 0;
+          ++
+            a := -B;
+      }
+
+      t := 0;
+      /* Distance between robot and obstacle is decreasing at the same rate the 
+         robot is moving at */
+      {
+       obstacleDist' = -v,  
+       v' = a, 
+       t' = 1 &
+       t <= ctrlT & v >= 0  /* Differential Equations */
+      }
+      
+
+    }*@invariant(obstacleDist >= (v)^2 / (2*B) + distBuffer &
+                 sensorRange >= (v)^2 / (2*B) + distBuffer &
+                 v >= 0) /* Loop Invariant */
+  ](obstacleDist >= (v)^2 / (2*B) + distBuffer & v >= 0) /* Post Condition */
+End.
+
+Tactic "Cruise Control Static: Proof"
+implyR(1) ; loop("obstacleDist>=v^2/(2*B())+distBuffer()&sensorRange()>=v^2/(2*B())+distBuffer()&v>=0", 1) ; <(
+  master,
+  master,
+  unfold ; <(
+    boxAnd(1) ; andR(1) ; <(
+      cut("obstacleDist>(sensedV+A()*vPublishT())*ctrlT()+0.5*A()*ctrlT()^2+(sensedV+A()*vPublishT()+A()*ctrlT())^2/(2*B())+distBuffer()") ; <(
+        hideL(-14=="sensedDist-((sensedV+A()*vPublishT())*scanT()+0.5*A()*scanT()^2)>(sensedV+A()*vPublishT())*ctrlT()+0.5*A()*ctrlT()^2+(sensedV+A()*vPublishT()+A()*ctrlT())^2/(2*B())+distBuffer()") ; hideL(-7=="sensorRange()>0") ; hideL(-9=="obstacleDist<=sensorRange()") ; hideL(-14=="sensorRange()>=v^2/(2*B())+distBuffer()") ; hideL(-13=="obstacleDist>=v^2/(2*B())+distBuffer()") ; orL(-11) ; <(
+          master,
+          orL(-11) ; <(
+            master,
+            master
+            )
+          ),
+        hideR(1=="[{obstacleDist'=-v,v'=A(),t'=1&t<=ctrlT()&v>=0}]obstacleDist>=v^2/(2*B())+distBuffer()") ; hideL(-15=="t=0") ; hideL(-15=="obstacleDist>=v^2/(2*B())+distBuffer()") ; hideL(-15=="sensorRange()>=v^2/(2*B())+distBuffer()") ; hideL(-7=="sensorRange()>0") ; hideL(-9=="obstacleDist<=sensorRange()") ; hideL(-10=="obstacleDist < sensedDist") ; master
+        ),
+      boxAnd(1) ; andR(1) ; <(
+        cut("sensorRange()>(sensedV+A()*vPublishT())*ctrlT()+0.5*A()*ctrlT()^2+(sensedV+A()*vPublishT()+A()*ctrlT())^2/(2*B())+distBuffer()") ; <(
+          hideL(-14=="sensedDist-((sensedV+A()*vPublishT())*scanT()+0.5*A()*scanT()^2)>(sensedV+A()*vPublishT())*ctrlT()+0.5*A()*ctrlT()^2+(sensedV+A()*vPublishT()+A()*ctrlT())^2/(2*B())+distBuffer()") ; hideL(-15=="obstacleDist>=v^2/(2*B())+distBuffer()") ; hideL(-15=="sensorRange()>=v^2/(2*B())+distBuffer()") ; hideL(-10=="obstacleDist<=sensorRange()") ; hideL(-10=="sensedDist-obstacleDist<=v*scanT()+0.5*A()*scanT()^2") ; hideL(-10=="obstacleDist < sensedDist") ; orL(-10) ; <(
+            master,
+            orL(-10) ; <(
+              andL(-10) ; andL(-14) ; hideL(-13=="a < 0") ; hideL(-13=="sensedV-v<=B()*vPublishT()") ; master,
+              master
+              )
+            ),
+          hideR(1=="[{obstacleDist'=-v,v'=A(),t'=1&t<=ctrlT()&v>=0}]sensorRange()>=v^2/(2*B())+distBuffer()") ; hideL(-15=="t=0") ; hideL(-16=="sensorRange()>=v^2/(2*B())+distBuffer()") ; hideL(-15=="obstacleDist>=v^2/(2*B())+distBuffer()") ; hideL(-12=="obstacleDist < sensedDist") ; master
+          ),
+        master
+        )
+      ),
+    boxAnd(1) ; andR(1) ; <(
+      cut("obstacleDist-((sensedV+A()*vPublishT())*scanT()+0.5*A()*scanT()^2)>(sensedV+A()*vPublishT())*ctrlT()+0.5*A()*ctrlT()^2+(sensedV+A()*vPublishT()+A()*ctrlT())^2/(2*B())+distBuffer()") ; <(
+        hideL(-12=="sensorRange()-((sensedV+A()*vPublishT())*scanT()+0.5*A()*scanT()^2)>(sensedV+A()*vPublishT())*ctrlT()+0.5*A()*ctrlT()^2+(sensedV+A()*vPublishT()+A()*ctrlT())^2/(2*B())+distBuffer()") ; hideL(-7=="sensorRange()>0") ; hideL(-9=="obstacleDist>sensorRange()") ; hideL(-12=="sensorRange()>=v^2/(2*B())+distBuffer()") ; hideL(-11=="obstacleDist>=v^2/(2*B())+distBuffer()") ; orL(-9) ; <(
+          andL(-9) ; andL(-13) ; hideL(-12=="a>0") ; hideL(-13=="sensedV < v") ; master,
+          orL(-9) ; <(
+            andL(-9) ; andL(-13) ; hideL(-12=="a < 0") ; hideL(-12=="sensedV-v<=B()*vPublishT()") ; master,
+            master
+            )
+          ),
+        hideR(1=="[{obstacleDist'=-v,v'=A(),t'=1&t<=ctrlT()&v>=0}]obstacleDist>=v^2/(2*B())+distBuffer()") ; hideL(-13=="t=0") ; master
+        ),
+      boxAnd(1) ; andR(1) ; <(
+        hideL(-14=="obstacleDist>=v^2/(2*B())+distBuffer()") ; hideL(-10=="obstacleDist>sensorRange()") ; hideL(-13=="sensorRange()>=v^2/(2*B())+distBuffer()") ; orL(-10) ; <(
+          andL(-10) ; andL(-14) ; hideL(-15=="sensedV < v") ; hideL(-13=="a>0") ; master,
+          orL(-10) ; <(
+            andL(-10) ; andL(-14) ; hideL(-13=="a < 0") ; hideL(-13=="sensedV-v<=B()*vPublishT()") ; master,
+            master
+            )
+          ),
+        master
+        )
+      ),
+    boxAnd(1) ; andR(1) ; <(
+      cut("obstacleDist>(sensedV+A()*vPublishT())*ctrlT()+(sensedV+A()*vPublishT())^2/(2*B())+distBuffer()") ; <(
+        hideL(-14=="sensedDist-((sensedV+A()*vPublishT())*scanT()+0.5*A()*scanT()^2)>(sensedV+A()*vPublishT())*ctrlT()+(sensedV+A()*vPublishT())^2/(2*B())+distBuffer()") ; hideL(-16=="sensorRange()>=v^2/(2*B())+distBuffer()") ; hideL(-7=="sensorRange()>0") ; hideL(-9=="obstacleDist<=sensorRange()") ; hideL(-13=="obstacleDist>=v^2/(2*B())+distBuffer()") ; hideL(-9=="sensedDist-obstacleDist<=v*scanT()+0.5*A()*scanT()^2") ; master,
+        hideR(1=="[{obstacleDist'=-v,v'=0,t'=1&t<=ctrlT()&v>=0}]obstacleDist>=v^2/(2*B())+distBuffer()") ; hideL(-16=="obstacleDist>=v^2/(2*B())+distBuffer()") ; hideL(-16=="sensorRange()>=v^2/(2*B())+distBuffer()") ; hideL(-15=="t=0") ; hideL(-10=="obstacleDist<=sensorRange()") ; master
+        ),
+      boxAnd(1) ; andR(1) ; <(
+        dI('R),
+        master
+        )
+      ),
+    master,
+    boxAnd(1) ; andR(1) ; <(
+      cut("obstacleDist-((sensedV+A()*vPublishT())*scanT()+0.5*A()*scanT()^2)>(sensedV+A()*vPublishT())*ctrlT()+(sensedV+A()*vPublishT())^2/(2*B())+distBuffer()") ; <(
+        hideL(-12=="sensorRange()-((sensedV+A()*vPublishT())*scanT()+0.5*A()*scanT()^2)>(sensedV+A()*vPublishT())*ctrlT()+(sensedV+A()*vPublishT())^2/(2*B())+distBuffer()") ; hideL(-10=="obstacleDist>sensorRange()") ; hideL(-7=="sensorRange()>0") ; hideL(-12=="sensorRange()>=v^2/(2*B())+distBuffer()") ; hideL(-11=="obstacleDist>=v^2/(2*B())+distBuffer()") ; orL(-9) ; <(
+          andL(-9) ; andL(-13) ; hideL(-12=="a>0") ; hideL(-13=="sensedV < v") ; master,
+          orL(-9) ; <(
+            andL(-9) ; andL(-13) ; hideL(-13=="sensedV-v<=B()*vPublishT()") ; hideL(-12=="a < 0") ; master,
+            master
+            )
+          ),
+        hideR(1=="[{obstacleDist'=-v,v'=0,t'=1&t<=ctrlT()&v>=0}]obstacleDist>=v^2/(2*B())+distBuffer()") ; master
+        ),
+      boxAnd(1) ; andR(1) ; <(
+        dI('R),
+        master
+        )
+      ),
+    master
+    )
+  )
+End.
+
+End.
