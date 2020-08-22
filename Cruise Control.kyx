@@ -1,0 +1,146 @@
+﻿/* Exported from KeYmaera X v4.7.4 */
+
+Theorem "pro2"
+Functions
+  Real A;           /* Lead car's max acceleration */
+  Real B;           /* Lead car's max braking */
+  Real ctrlT;       /* Time-trigger limit on evolution */
+  Real posT;       /* Time interval to update obstacle position from lead car */
+  Real velT;   /* Time interval to update lead car's velocity from sensors */
+  Real safedist;  /* Safe distance between lead car and obstacle */ 
+  Real sensorRange; /* Maximum range of lidar sensor.*/  /* used as the default value of the 
+     obstacle range when an object isn't detected. */
+  
+End.
+
+ProgramVariables
+  Real vlead; /* Lead car linear velocity */
+  Real alead; /* Lead car acceleration */
+  Real obstacleDist; /* Distance to obstacle */
+  Real sensedDist; /* Approximate distance to obstacle based on sensor */
+  Real sensedV;     /* Approximate velocity of lead car based on sensor */
+  Real t; /* Time */
+  Real tempV;/* Temporary variable to upper bound a future velocity */
+  Real tempDist;
+End.
+
+Problem
+  (
+    A > 0  & 
+   -B < 0  &
+    ctrlT > 0  &
+    posT > 0  &
+    velT > 0 &
+    safedist > 0  &
+    sensorRange > 0  &
+    vlead >= 0  &
+    sensedV = vlead &  /* Assume initial sensor value is equal to lead car velocity */
+    posT < ctrlT &
+    velT < ctrlT &
+    obstacleDist >= vlead^2 / (2*B) + safedist &
+    sensorRange >= vlead^2 / (2*B) + safedist /* The obstacle distance must be greater than the safe + current stopping distance (vlead^2 / (2*B)) */
+
+  ) /* Initial conditions */
+  ->
+  [
+    {
+       
+        {
+          {?(obstacleDist <= sensorRange);/*If we are in range, we assign a valued to sensedDist that is within some range.*/
+            sensedDist := *; ?((sensedDist-obstacleDist) <= (vlead * posT + 0.5 * A * posT^2) & obstacleDist < sensedDist);
+          }
+          ++
+          {?(obstacleDist > sensorRange);
+            sensedDist := sensorRange;/*we simply assume the worst case that there is an obstacle right at the boundary of the sensor range.*/
+          }
+        }
+
+      sensedV := *; /*Set arbitrary value for sensor velocity of lead car*/
+      ?((alead > 0 & (vlead-sensedV) <= A * velT & sensedV < vlead)| (alead < 0 & (sensedV - vlead) <= B * velT & sensedV > vlead) | (alead = 0 & sensedV = vlead));
+      tempV := (sensedV + A*velT);/*If accelerating our sensed v is old so it should be smaller than the vlead*/
+      /*the relationship between sensedV and the vlead is dependent on the acceleration.*/
+      tempDist :=  (sensedDist - (tempV * posT + 0.5 * A * posT^2));
+      /* lead car control */
+      {
+          
+          ?tempDist > (tempV * ctrlT + 0.5 * A * ctrlT^2) + (tempV)^2 / (2*B) + safedist;
+            alead := A;/*Accelerate when obstacle distance is greater than current stopping distance((tempV + A*ctrlT)^2/2*B) + safe distance*/
+          ++
+          ?tempDist > (tempV * ctrlT) + (tempV^2 / (2*B)) + safedist;
+            alead := 0;
+          ++
+            alead := -B;/*Choice for decelerating */
+      }
+
+      t := 0;
+      /* ODE's */
+      {
+       obstacleDist' = -vlead,  
+       vlead' = alead, 
+       t' = 1 &
+       t <= ctrlT & vlead >= 0  /* Evolution Domain */
+      }
+      
+
+    }*@invariant(obstacleDist >= (vlead)^2 / (2*B) + safedist & /*obstacle distance is always greater than stopping distance + safe distance*/
+                 sensorRange >= (vlead)^2 / (2*B) + safedist &
+                 vlead >= 0) /* velocity is non negative */
+  ](obstacleDist >= (vlead)^2 / (2*B) + safedist & vlead >= 0) /* Safety condition */
+End.
+
+Tactic "pro2: Proof"
+nil
+End.
+
+Tactic "pro2: Proof"
+nil
+End.
+
+Tactic "pro2: Proof"
+nil
+End.
+
+Tactic "pro2: Proof"
+nil
+End.
+
+Tactic "pro2: Proof"
+nil
+End.
+
+Tactic "pro2: Proof"
+nil
+End.
+
+Tactic "pro2: Proof"
+nil
+End.
+
+Tactic "pro2: Proof"
+nil
+End.
+
+Tactic "pro2: Proof"
+nil
+End.
+
+Tactic "pro2: Proof"
+nil
+End.
+
+Tactic "pro2: Proof"
+implyR(1) ; loop("obstacleDist>=vlead^2/(2*B())+safedist()&sensorRange()>=vlead^2/(2*B())+safedist()&vlead>=0", 1) ; <(
+  master,
+  master,
+  unfold ; <(
+    nil,
+    nil,
+    nil,
+    nil,
+    nil,
+    nil
+    )
+  )
+End.
+
+End.
